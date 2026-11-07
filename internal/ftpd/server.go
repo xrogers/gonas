@@ -135,13 +135,13 @@ func (s *Server) GetSettings() (*ftpserver.Settings, error) {
 		DisableSite:             !s.config.EnableSite,
 		DisableActiveMode:       s.config.DisableActiveMode,
 		EnableHASH:              s.config.HASHSupport > 0,
-		EnableCOMB:              s.config.CombineSupport > 0,
 		DefaultTransferType:     ftpserver.TransferTypeBinary,
 		ActiveConnectionsCheck:  ftpserver.DataConnectionRequirement(s.binding.ActiveConnectionsSecurity),
 		PasvConnectionsCheck:    ftpserver.DataConnectionRequirement(s.binding.PassiveConnectionsSecurity),
 	}
 	if portRange != nil {
 		settings.PassiveTransferPortRange = portRange
+		settings.PassiveTransferPortMultiplexing = s.config.PassivePortMultiplexing
 	}
 	return settings, nil
 }

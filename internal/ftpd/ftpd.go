@@ -288,14 +288,38 @@ type Configuration struct {
 	// remote backends this means downloading the file, for the encrypted backend this means
 	// decrypting the file
 	HASHSupport int `json:"hash_support" mapstructure:"hash_support"`
-	// Set to 1 to enable support for the non standard "COMB" FTP command.
-	// Combine is only supported for local filesystem, for cloud backends it has
-	// no advantage as it will download the partial files and will upload the
-	// combined one. Cloud backends natively support multipart uploads.
-	CombineSupport int `json:"combine_support" mapstructure:"combine_support"`
 	// Port Range for data connections. Random if not specified
 	PassivePortRange PortRange `json:"passive_port_range" mapstructure:"passive_port_range"`
-	acmeDomain       string
+	// Set to true to share the ports of the passive port range among clients, data connections are
+	// routed to the client by source IP
+	PassivePortMultiplexing bool `json:"passive_port_multiplexing" mapstructure:"passive_port_multiplexing"`
+	acmeDomain              string
+}
+
+func (c *Configuration) checkPassivePortMultiplexing() error {
+	if !c.PassivePortMultiplexing {
+		return nil
+	}
+	if c.PassivePortRange.Start <= 0 || c.PassivePortRange.End < c.PassivePortRange.Start ||
+		c.PassivePortRange.End > 65535 {
+		return fmt.Errorf("passive port multiplexing requires a valid passive port range, got %d-%d",
+			c.PassivePortRange.Start, c.PassivePortRange.End)
+	}
+	bindings := 0
+	for _, binding := range c.Bindings {
+		if !binding.IsValid() {
+			continue
+		}
+		bindings++
+		if binding.PassiveConnectionsSecurity != 0 {
+			return fmt.Errorf("passive port multiplexing requires passive_connections_security set to 0, binding %q",
+				binding.GetAddress())
+		}
+	}
+	if bindings > 1 {
+		return errors.New("passive port multiplexing requires a single FTP binding")
+	}
+	return nil
 }
 
 // ShouldBind returns true if there is at least a valid binding
@@ -374,6 +398,9 @@ func (c *Configuration) Initialize(configDir string) error {
 	logger.Info(logSender, "", "initializing FTP server with config %+v", *c)
 	if !c.ShouldBind() {
 		return common.ErrNoBinding
+	}
+	if err := c.checkPassivePortMultiplexing(); err != nil {
+		return err
 	}
 
 	keyPairs := c.getKeyPairs(configDir)
